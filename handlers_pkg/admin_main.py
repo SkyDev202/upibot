@@ -761,7 +761,7 @@ def open_settings(call):
 
 
 def show_settings(chat_id):
-    pr = get_setting("per_refer")
+    pr = get_referral_reward_label()
     mw = get_setting("min_withdraw")
     wb = get_setting("welcome_bonus")
     db_val = get_setting("daily_bonus")
@@ -781,7 +781,7 @@ def show_settings(chat_id):
     tk_en = get_setting("tasks_enabled")
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
-        types.InlineKeyboardButton(f"💰 Per Refer: ₹{pr}", callback_data="s_per_refer"),
+        types.InlineKeyboardButton(f"💰 Per Refer: {pr}", callback_data="s_per_refer"),
         types.InlineKeyboardButton(f"📉 Min WD: ₹{mw}", callback_data="s_min_wd"),
     )
     markup.add(
@@ -1440,6 +1440,10 @@ def adv_referral(call):
     )
     markup.add(types.InlineKeyboardButton("Level 3", callback_data="adv_ref_level_3"))
     markup.add(
+        types.InlineKeyboardButton(f"{'🟢' if bool(get_setting('random_referral_reward_enabled')) else '🔴'} Random Reward", callback_data="tog_random_referral_reward"),
+        types.InlineKeyboardButton("🎲 Reward Range", callback_data="adv_ref_random_range"),
+    )
+    markup.add(
         types.InlineKeyboardButton("Min refs for daily bonus", callback_data="adv_ref_min_bonus"),
         types.InlineKeyboardButton("Min refs for redeem", callback_data="adv_ref_min_redeem"),
     )
@@ -1579,6 +1583,21 @@ def adv_ref_level(call):
     level = int(call.data.rsplit('_', 1)[1])
     settings_ask(call, f"admin_set_ref_level_{level}", f"{pe('pencil')} Enter level {level} referral rule:\n<code>fixed 2</code> or <code>percent 10</code>")
 
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "tog_random_referral_reward")
+def tog_random_referral_reward(call):
+    if not is_admin(call.from_user.id):
+        return
+    cur = bool(get_setting("random_referral_reward_enabled"))
+    set_setting("random_referral_reward_enabled", not cur)
+    safe_answer(call, f"Random referral reward {'Disabled' if cur else 'Enabled'}")
+    adv_referral(call)
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "adv_ref_random_range")
+def adv_ref_random_range(call):
+    settings_ask(call, "admin_set_random_referral_range", f"{pe('pencil')} Enter referral reward range:\n<code>1 5</code> means users get a random reward from ₹1 to ₹5.")
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "adv_ref_min_bonus")

@@ -597,7 +597,30 @@ def universal_handler(message):
             return
         clear_state(user_id)
         set_setting("per_refer", val)
-        safe_send(message.chat.id, f"{pe('check')} Per Refer = ₹{val}")
+        set_setting("referral_level_1_type", "fixed")
+        set_setting("referral_level_1_value", val)
+        set_setting("random_referral_reward_enabled", False)
+        safe_send(message.chat.id, f"{pe('check')} Fixed Per Refer = ₹{val}")
+        return
+
+    if state == "admin_set_random_referral_range":
+        try:
+            parts = text.replace(",", " " ).split()
+            min_amt = float(parts[0])
+            max_amt = float(parts[1])
+        except Exception:
+            safe_send(message.chat.id, f"{pe('cross')} Format: <code>1 5</code>")
+            return
+        if min_amt < 0 or max_amt < 0:
+            safe_send(message.chat.id, f"{pe('cross')} Amount cannot be negative!")
+            return
+        if max_amt < min_amt:
+            min_amt, max_amt = max_amt, min_amt
+        clear_state(user_id)
+        set_setting("random_referral_reward_min", round(min_amt, 2))
+        set_setting("random_referral_reward_max", round(max_amt, 2))
+        set_setting("random_referral_reward_enabled", True)
+        safe_send(message.chat.id, f"{pe('check')} Random referral reward enabled: ₹{min_amt:.2f} - ₹{max_amt:.2f}")
         return
 
     if state == "admin_set_withdraw_required_referrals":

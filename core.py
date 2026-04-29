@@ -71,6 +71,9 @@ DEFAULT_SETTINGS = {
     "referral_system_enabled": True,
     "referral_level_1_type": "fixed",
     "referral_level_1_value": 2,
+    "random_referral_reward_enabled": False,
+    "random_referral_reward_min": 1,
+    "random_referral_reward_max": 2,
     "referral_level_2_type": "fixed",
     "referral_level_2_value": 1,
     "referral_level_3_type": "fixed",
@@ -181,6 +184,27 @@ def pe(name):
     return "⭐"
 
 
+PLAIN_EMOJI_TO_PREMIUM = {
+    "✅": pe("check"), "❌": pe("cross"), "⚠️": pe("warning"), "💰": pe("money"),
+    "💸": pe("fly_money"), "🎉": pe("party"), "🎁": pe("gift"), "🔥": pe("fire"),
+    "👥": pe("people"), "📊": pe("chart"), "📈": pe("chart_up"), "📉": pe("chart_down"),
+    "⚙️": pe("gear"), "✏️": pe("pencil"), "🔗": pe("link"), "📢": pe("megaphone"),
+    "⏰": pe("hourglass"), "🏆": pe("trophy"), "💎": pe("diamond"), "⭐": pe("star"),
+    "🛡": pe("shield"), "🧾": pe("paperclip"), "🚀": pe("rocket"), "🔄": pe("refresh"),
+    "🟢": pe("active"), "🔴": pe("inactive"),
+}
+
+
+def premiumize_text(text):
+    text = str(text or "")
+    # Do not touch already animated emoji markup, because nested tg-emoji tags break Telegram HTML.
+    if "<tg-emoji" in text:
+        return text
+    for plain, premium in PLAIN_EMOJI_TO_PREMIUM.items():
+        text = text.replace(plain, premium)
+    return text
+
+
 def h(value):
     return html.escape(str(value or ""), quote=False)
 
@@ -223,6 +247,18 @@ def _wrap_telegram_call(method_name, text_arg_index=None, caption_arg_index=None
 
     @functools.wraps(original)
     def wrapper(*args, **kwargs):
+        args = list(args)
+        if text_arg_index is not None:
+            if len(args) > text_arg_index:
+                args[text_arg_index] = premiumize_text(args[text_arg_index])
+            elif "text" in kwargs:
+                kwargs["text"] = premiumize_text(kwargs.get("text", ""))
+        if caption_arg_index is not None:
+            if len(args) > caption_arg_index:
+                args[caption_arg_index] = premiumize_text(args[caption_arg_index])
+            elif "caption" in kwargs:
+                kwargs["caption"] = premiumize_text(kwargs.get("caption", ""))
+        args = tuple(args)
         try:
             return original(*args, **kwargs)
         except Exception as exc:
@@ -952,11 +988,37 @@ def grant_welcome_bonus_if_eligible(user_id):
 
 
 def get_referral_base_amount():
+    if bool(get_setting("random_referral_reward_enabled")):
+        return get_random_referral_reward()
     level1_type = str(get_setting("referral_level_1_type") or "fixed").lower()
     level1_value = float(get_setting("referral_level_1_value") or 0)
     if level1_type == "percent":
         return float(get_setting("per_refer") or level1_value or 0)
     return level1_value
+
+
+def get_random_referral_reward():
+    try:
+        min_amt = float(get_setting("random_referral_reward_min") or 0)
+        max_amt = float(get_setting("random_referral_reward_max") or 0)
+    except Exception:
+        min_amt, max_amt = 0.0, 0.0
+    if min_amt < 0:
+        min_amt = 0.0
+    if max_amt < min_amt:
+        min_amt, max_amt = max_amt, min_amt
+    if max_amt <= 0:
+        return 0.0
+    return round(random.uniform(min_amt, max_amt), 2)
+
+
+def get_referral_reward_label():
+    if bool(get_setting("random_referral_reward_enabled")):
+        min_amt = float(get_setting("random_referral_reward_min") or 0)
+        max_amt = float(get_setting("random_referral_reward_max") or 0)
+        return f"₹{min_amt:.2f} - ₹{max_amt:.2f}"
+    amount = float(get_setting("per_refer") or get_setting("referral_level_1_value") or 0)
+    return f"₹{amount:.2f}"
 
 
 def update_user(user_id, **kwargs):
@@ -988,10 +1050,14 @@ def is_ip_verification_required():
 def get_referral_reward(level, base_amount=0):
     if not bool(get_setting("referral_system_enabled")):
         return 0.0
+    if level == 1 and bool(get_setting("random_referral_reward_enabled")):
+        return round(float(base_amount or get_random_referral_reward() or 0), 2)
     mode = str(get_setting(f"referral_level_{level}_type") or "fixed").lower()
     value = float(get_setting(f"referral_level_{level}_value") or 0)
     if mode == "percent":
         return round(float(base_amount or 0) * value / 100.0, 2)
+    if mode == "random":
+        return get_random_referral_reward()
     return round(value, 2)
 
 
@@ -1220,6 +1286,7 @@ def get_admin_logs(limit=50):
 
 # ======================== SAFE SEND / EDIT ========================
 def safe_send(chat_id, text, **kwargs):
+    text = premiumize_text(text)
     try:
         return bot.send_message(chat_id, text, parse_mode="HTML", **kwargs)
     except Exception as e:
@@ -1642,7 +1709,7 @@ def send_public_withdrawal_notification(user_id, amount, upi_id, status, txn_id=
                 f"━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"🚀 <b>You can earn too!</b>\n"
                 f"👉 Join → @{bot_username}\n"
-                f"💎 Refer friends & earn <b>₹{get_setting('per_refer')}</b> each!\n"
+                f"💎 Refer friends & earn <b>{get_referral_reward_label()}</b> each!\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━"
             )
             markup = types.InlineKeyboardMarkup()

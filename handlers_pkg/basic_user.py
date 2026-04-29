@@ -86,7 +86,7 @@ def send_welcome(chat_id, user_id, first_name, is_new=False):
     if not user:
         return
     balance = user["balance"]
-    per_refer = get_setting("per_refer")
+    per_refer = get_referral_reward_label()
     min_withdraw = get_setting("min_withdraw")
     welcome_image = get_setting("welcome_image")
     try:
@@ -100,7 +100,7 @@ def send_welcome(chat_id, user_id, first_name, is_new=False):
         f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"{pe('smile')} Hello, <b>{first_name}</b>!\n\n"
         f"{pe('fly_money')} <b>Your Balance:</b> ₹{balance:.2f}\n"
-        f"{pe('star')} <b>Per Refer:</b> ₹{per_refer}\n"
+        f"{pe('star')} <b>Per Refer:</b> {per_refer}\n"
         f"{pe('down_arrow')} <b>Min Withdraw:</b> ₹{min_withdraw}\n\n"
         f"{pe('zap')} <b>How to Earn?</b>\n"
         f"  {pe('play')} Share your referral link\n"
@@ -184,7 +184,7 @@ def balance_handler(message):
         f"{pe('chart_up')} <b>Total Earned:</b> ₹{user['total_earned']:.2f}\n"
         f"{pe('check')} <b>Total Withdrawn:</b> ₹{user['total_withdrawn']:.2f}\n"
         f"{pe('thumbs_up')} <b>Total Referrals:</b> {user['referral_count']}\n\n"
-        f"{pe('star')} <b>Per Refer:</b> ₹{get_setting('per_refer')}\n"
+        f"{pe('star')} <b>Per Refer:</b> {get_referral_reward_label()}\n"
         f"{pe('down_arrow')} <b>Min Withdraw:</b> ₹{get_setting('min_withdraw')}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━"
     )
@@ -210,7 +210,7 @@ def refresh_balance(call):
         f"{pe('chart_up')} <b>Total Earned:</b> ₹{user['total_earned']:.2f}\n"
         f"{pe('check')} <b>Total Withdrawn:</b> ₹{user['total_withdrawn']:.2f}\n"
         f"{pe('thumbs_up')} <b>Total Referrals:</b> {user['referral_count']}\n\n"
-        f"{pe('star')} <b>Per Refer:</b> ₹{get_setting('per_refer')}\n"
+        f"{pe('star')} <b>Per Refer:</b> {get_referral_reward_label()}\n"
         f"{pe('down_arrow')} <b>Min Withdraw:</b> ₹{get_setting('min_withdraw')}\n\n"
         f"{pe('refresh')} <i>Just refreshed!</i>\n"
         f"━━━━━━━━━━━━━━━━━━━━━━"
@@ -242,13 +242,13 @@ def open_refer_cb(call):
     show_refer(call.message.chat.id, user_id, user)
 
 def show_refer(chat_id, user_id, user):
-    per_refer = get_setting("per_refer")
+    per_refer = get_referral_reward_label()
     try:
         bot_username = bot.get_me().username
     except Exception:
         bot_username = "bot"
     refer_link = f"https://t.me/{bot_username}?start={user_id}"
-    share_msg = f"💰 Earn ₹{per_refer} per refer! Join {refer_link}"
+    share_msg = f"💰 Earn {per_refer} per refer! Join {refer_link}"
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(types.InlineKeyboardButton(
         "📤 Share My Referral Link",
@@ -257,17 +257,17 @@ def show_refer(chat_id, user_id, user):
     text = (
         f"{pe('fire')} <b>Refer & Earn</b> {pe('fly_money')}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"{pe('star')} <b>Earn ₹{per_refer} per referral!</b>\n\n"
+        f"{pe('star')} <b>Earn {per_refer} per referral!</b>\n\n"
         f"{pe('link')} <b>Your Referral Link:</b>\n"
         f"<code>{refer_link}</code>\n\n"
         f"{pe('chart_up')} <b>Your Stats:</b>\n"
         f"  {pe('thumbs_up')} Referrals: {user['referral_count']}\n"
-        f"  {pe('money')} Earned: ₹{user['referral_count'] * per_refer:.2f}\n\n"
+        f"  {pe('money')} Earned: ₹{float(user['total_referral_earnings'] or 0):.2f}\n\n"
         f"{pe('zap')} <b>How It Works:</b>\n"
         f"  {pe('play')} Share your link\n"
         f"  {pe('play')} Friend joins the bot\n"
         f"  {pe('play')} Friend joins all required channels and verifies IP\n"
-        f"  {pe('play')} You get ₹{per_refer} after full verification!\n\n"
+        f"  {pe('play')} You get {per_refer} after full verification!\n\n"
         f"{pe('boom')} <b>Share on:</b> WhatsApp, Instagram,\n"
         f"Telegram groups, Facebook!\n\n"
         f"{pe('crown')} <i>No limit! Earn unlimited!</i>\n"

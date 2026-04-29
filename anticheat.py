@@ -7,6 +7,7 @@ import os
 import re
 import sqlite3
 import time
+import random
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -560,16 +561,36 @@ def create_verification_app(
         send_text_message(user_id, "🚫 Multiple accounts from one device are not allowed.", reply_markup=build_continue_keyboard())
         return True
 
+    def get_random_referral_reward() -> float:
+        try:
+            min_amt = float(get_setting_value("random_referral_reward_min", 1) or 0)
+            max_amt = float(get_setting_value("random_referral_reward_max", 2) or 0)
+        except Exception:
+            min_amt, max_amt = 0.0, 0.0
+        if min_amt < 0:
+            min_amt = 0.0
+        if max_amt < min_amt:
+            min_amt, max_amt = max_amt, min_amt
+        if max_amt <= 0:
+            return 0.0
+        return round(random.uniform(min_amt, max_amt), 2)
+
     def get_referral_reward(level: int, base_amount: float) -> float:
         if not bool(get_setting_value("referral_system_enabled", True)):
             return 0.0
+        if level == 1 and bool(get_setting_value("random_referral_reward_enabled", False)):
+            return round(float(base_amount or get_random_referral_reward() or 0), 2)
         mode = str(get_setting_value(f"referral_level_{level}_type", "fixed") or "fixed").lower()
         value = float(get_setting_value(f"referral_level_{level}_value", 0) or 0)
         if mode == "percent":
             return round(float(base_amount or 0) * value / 100.0, 2)
+        if mode == "random":
+            return get_random_referral_reward()
         return round(value, 2)
 
     def get_referral_base_amount() -> float:
+        if bool(get_setting_value("random_referral_reward_enabled", False)):
+            return get_random_referral_reward()
         level1_type = str(get_setting_value("referral_level_1_type", "fixed") or "fixed").lower()
         level1_value = float(get_setting_value("referral_level_1_value", 2) or 0)
         if level1_type == "percent":
