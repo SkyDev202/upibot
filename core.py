@@ -241,6 +241,17 @@ def _is_unreachable_chat_error(exc):
     ]
     return any(marker in text for marker in markers)
 
+def _is_ignorable_telegram_error(exc):
+    text = _telegram_error_text(exc).lower()
+    markers = [
+        "message to delete not found",
+        "message can't be deleted",
+        "message is not modified",
+        "there is no text in the message to edit",
+        "message is not a text message",
+    ]
+    return _is_unreachable_chat_error(exc) or any(marker in text for marker in markers)
+
 
 def _wrap_telegram_call(method_name, text_arg_index=None, caption_arg_index=None):
     original = getattr(bot, method_name)
@@ -1302,12 +1313,28 @@ def safe_send(chat_id, text, **kwargs):
             return None
 
 def safe_edit(chat_id, message_id, text, **kwargs):
+    text = premiumize_text(text)
     try:
         return bot.edit_message_text(
             text, chat_id=chat_id, message_id=message_id,
             parse_mode="HTML", **kwargs
         )
     except Exception as e:
+        err = _telegram_error_text(e).lower()
+        # Media messages have captions, not editable text. This fixes the
+        # Railway log error: "there is no text in the message to edit".
+        if "no text in the message to edit" in err or "message is not a text message" in err:
+            try:
+                return bot.edit_message_caption(
+                    caption=text, chat_id=chat_id, message_id=message_id,
+                    parse_mode="HTML", **kwargs
+                )
+            except Exception as cap_err:
+                if not _is_ignorable_telegram_error(cap_err):
+                    print(f"safe_edit caption error: {cap_err}")
+                return None
+        if _is_ignorable_telegram_error(e):
+            return None
         print(f"safe_edit error: {e}")
         try:
             plain_kwargs = dict(kwargs)
@@ -1461,7 +1488,9 @@ def safe_delete_message(chat_id, message_id):
             bot.delete_message(chat_id, int(message_id))
             return True
     except Exception as e:
-        print(f"delete message skipped: {e}")
+        # Already-deleted/expired Telegram messages are normal during cleanup.
+        if not _is_ignorable_telegram_error(e):
+            print(f"delete message skipped: {e}")
     return False
 
 

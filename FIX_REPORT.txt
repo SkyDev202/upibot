@@ -1,0 +1,26 @@
+UPI Bot Fix Report
+==================
+
+Fixed without removing any existing feature/function:
+
+1. safe_edit media-message bug
+   - Fixed Telegram error: "Bad Request: there is no text in the message to edit".
+   - If an admin action tries to edit a photo/video/document card, the bot now edits the caption instead of failing.
+
+2. safe_delete_message noisy log bug
+   - Already-deleted or expired Telegram messages are now ignored safely.
+   - This stops repeated Railway logs like: "message to delete not found".
+
+3. Broadcast blocked/deactivated user spam
+   - Telegram 403 blocked/deactivated users are now handled as normal failed sends.
+   - The broadcast continues and does not flood logs with thousands of repeated error lines.
+
+4. Broadcast flood-limit handling
+   - Added retry-after handling for Telegram rate-limit errors.
+   - The bot waits briefly and retries instead of immediately failing that user.
+
+5. Syntax/compile check
+   - Checked all Python files with py_compile successfully.
+
+Note:
+- 403 errors from users who blocked the bot or deleted accounts cannot be "fixed" by code because Telegram will not allow sending to them. The bot now handles them cleanly.

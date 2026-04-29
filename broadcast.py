@@ -7,6 +7,33 @@ from typing import Any, Callable, Dict, List, Optional
 from telebot import types
 
 
+def _telegram_error_text(exc: Any) -> str:
+    try:
+        return str(exc or "")
+    except Exception:
+        return ""
+
+
+def _is_unreachable_error(exc: Any) -> bool:
+    text = _telegram_error_text(exc).lower()
+    return any(
+        marker in text
+        for marker in (
+            "bot was blocked by the user",
+            "user is deactivated",
+            "chat not found",
+            "forbidden: bot was kicked",
+        )
+    )
+
+
+def _retry_after_seconds(exc: Any) -> int:
+    text = _telegram_error_text(exc).lower()
+    import re
+    match = re.search(r"retry after (\d+)", text)
+    return int(match.group(1)) if match else 0
+
+
 class BroadcastSystem:
     def __init__(
         self,
@@ -465,7 +492,18 @@ class BroadcastSystem:
             return True
 
         except Exception as exc:
-            print(f"[BroadcastSystem] failed to send to {user_id}: {exc}")
+            wait_for = _retry_after_seconds(exc)
+            if wait_for:
+                # Respect Telegram flood limits once, then retry the same user.
+                time.sleep(min(wait_for, 30))
+                try:
+                    return self.send_to_one(user_id, data)
+                except Exception:
+                    return False
+            # Blocked/deactivated users are normal in large broadcasts; count as
+            # failed but avoid filling logs with thousands of repeated lines.
+            if not _is_unreachable_error(exc):
+                print(f"[BroadcastSystem] failed to send to {user_id}: {exc}")
             return False
 
     def execute_broadcast(
