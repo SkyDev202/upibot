@@ -119,7 +119,12 @@ class BroadcastSystem:
         )
         markup.add(
             types.InlineKeyboardButton(
-                "📤 Forward / Copy Existing", callback_data="advbrod_type_copy"
+                "📤 Copy Existing (No Tag)", callback_data="advbrod_type_copy"
+            )
+        )
+        markup.add(
+            types.InlineKeyboardButton(
+                "🏷 Forward Existing (With Tag)", callback_data="advbrod_type_forward"
             )
         )
         markup.add(
@@ -246,11 +251,16 @@ class BroadcastSystem:
             body = body[:800] + "\n\n...truncated in preview..."
 
         has_buttons = bool((data.get("buttons_json") or "").strip())
+        buttons_status = (
+            "Not supported for forward-with-tag"
+            if btype == "forward"
+            else ("Yes" if has_buttons else "No")
+        )
         return (
             f"🚀 <b>Advanced Broadcast Preview</b>\n\n"
             f"<b>Type:</b> {btype}\n"
             f"<b>Total users:</b> {total_users}\n"
-            f"<b>Buttons:</b> {'Yes' if has_buttons else 'No'}\n\n"
+            f"<b>Buttons:</b> {buttons_status}\n\n"
             f"<b>Preview text/caption:</b>\n{body}"
         )
 
@@ -337,6 +347,13 @@ class BroadcastSystem:
                     from_chat_id=data["source_chat_id"],
                     message_id=data["source_message_id"],
                     reply_markup=markup,
+                )
+
+            elif btype == "forward":
+                self.bot.forward_message(
+                    chat_id=chat_id,
+                    from_chat_id=data["source_chat_id"],
+                    message_id=data["source_message_id"],
                 )
 
         except Exception as exc:
@@ -433,6 +450,15 @@ class BroadcastSystem:
                     reply_markup=markup,
                 )
 
+            elif btype == "forward":
+                # Real Telegram forward: this keeps the forward tag.
+                # Telegram does not allow adding custom inline buttons to forward_message.
+                self.bot.forward_message(
+                    chat_id=user_id,
+                    from_chat_id=data["source_chat_id"],
+                    message_id=data["source_message_id"],
+                )
+
             else:
                 return False
 
@@ -502,7 +528,8 @@ class BroadcastSystem:
                     "<b>Supported:</b>\n"
                     "• text\n• photo\n• video\n• document\n"
                     "• animation\n• audio\n• voice\n• sticker\n"
-                    "• forward / copy existing message\n\n"
+                    "• copy existing message without forward tag\n"
+                    "• forward existing message with forward tag\n\n"
                     "HTML formatting and inline buttons are supported."
                 ),
                 reply_markup=self.main_menu(),
@@ -564,8 +591,13 @@ class BroadcastSystem:
                     "voice": "🎤 <b>Send the voice message now.</b>\n\nCaption is optional.",
                     "sticker": "🙂 <b>Send the sticker now.</b>",
                     "copy": (
-                        "📤 <b>Forward the source message to me now.</b>\n\n"
-                        "I will copy it to all users exactly as-is."
+                        "📤 <b>Forward or send the source message to me now.</b>\n\n"
+                        "I will copy it to all users without the forward tag."
+                    ),
+                    "forward": (
+                        "🏷 <b>Forward or send the source message to me now.</b>\n\n"
+                        "I will forward it to all users with the Telegram forward tag.\n\n"
+                        "Note: Telegram does not allow inline buttons on real forwarded messages."
                     ),
                 }
                 self._send(chat_id, prompts.get(btype, "Send content now."))
@@ -655,6 +687,7 @@ class BroadcastSystem:
             content_types=[
                 "text", "photo", "video", "document",
                 "animation", "audio", "voice", "sticker",
+                "contact", "location", "venue", "poll", "dice", "video_note",
             ],
         )
         def advbrod_state_handler(message: Any) -> None:
@@ -778,10 +811,23 @@ class BroadcastSystem:
                 return
             data["file_id"] = message.sticker.file_id
 
-        # ── copy / forward ────────────────────────────────────────
+        # ── copy existing without forward tag ─────────────────────
         elif btype == "copy":
             data["source_chat_id"] = message.chat.id
             data["source_message_id"] = message.message_id
+
+        # ── forward existing with Telegram forward tag ────────────
+        elif btype == "forward":
+            data["source_chat_id"] = message.chat.id
+            data["source_message_id"] = message.message_id
+            data["buttons_json"] = ""
+            self.set_state(user_id, "ready_preview", data)
+            self._send(
+                chat_id,
+                "✅ Forward-with-tag message saved. Preview is below.",
+            )
+            self.send_preview(chat_id, data)
+            return
 
         else:
             self._send(chat_id, "❌ Unknown broadcast type. Use /advbrod to restart.")
